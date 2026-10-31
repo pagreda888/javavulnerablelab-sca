@@ -20,16 +20,16 @@ jobs: # lista de trabajos del workflow
         uses: actions/checkout@v4 # clona el repositorio en la maquina virtual
 
       - name: Instalar Java 17 # paso 2
-        uses: actions/setup-java@v4 # accion oficial para preparar Java
+        uses: actions/setup-java@v5 # accion oficial para preparar Java
         with: # parametros de la accion
           distribution: temurin # distribucion del JDK (Eclipse Temurin)
           java-version: "17" # version de Java que pide el laboratorio
 
-      - name: Cache de la base de datos del NVD # paso 3
-        uses: actions/cache@v4 # accion para guardar y restaurar carpetas entre ejecuciones
+      - name: Restaurar la base del NVD desde la cache # paso 3
+        uses: actions/cache/restore@v4 # solo restaura; el guardado va al final para que ocurra aunque el analisis falle
         with: # parametros de la cache
           path: ~/.m2/repository/org/owasp/dependency-check-data # carpeta donde el plugin guarda la base del NVD
-          key: nvd-db-${{ runner.os }}-${{ github.run_id }} # llave unica por ejecucion para guardar la base actualizada
+          key: nvd-db-${{ runner.os }}-${{ github.run_id }} # llave unica por ejecucion
           restore-keys: nvd-db-${{ runner.os }}- # restaura la ultima base guardada aunque la llave no coincida
 
       - name: Ejecutar Dependency-Check # paso 4
@@ -39,7 +39,7 @@ jobs: # lista de trabajos del workflow
 
       - name: Subir SARIF a Code scanning # paso 5
         if: always() # se ejecuta aunque el paso anterior falle por vulnerabilidades
-        uses: github/codeql-action/upload-sarif@v3 # accion que carga SARIF de cualquier herramienta
+        uses: github/codeql-action/upload-sarif@v4 # accion que carga SARIF de cualquier herramienta
         with: # parametros de la carga
           sarif_file: target/dependency-check-report.sarif # archivo SARIF generado por Dependency-Check
           category: dependency-check # categoria con la que aparecen las alertas en Security
@@ -51,6 +51,13 @@ jobs: # lista de trabajos del workflow
           name: dependency-check-reportes # nombre del artefacto en la seccion Artifacts
           path: target/dependency-check-report.* # guarda los reportes HTML y XML (y el SARIF) generados en target
 
+      - name: Guardar la base del NVD en la cache # paso 7
+        if: always() # se guarda aunque el job falle, si no la siguiente ejecucion la descarga completa otra vez
+        uses: actions/cache/save@v4 # guarda la carpeta en la cache de GitHub
+        with: # parametros de la cache
+          path: ~/.m2/repository/org/owasp/dependency-check-data # misma carpeta que se restauro en el paso 3
+          key: nvd-db-${{ runner.os }}-${{ github.run_id }} # misma llave unica de esta ejecucion
+
   sbom: # job extra que genera el SBOM
     name: Generar SBOM CycloneDX # nombre visible del job
     runs-on: ubuntu-latest # maquina virtual de GitHub con Ubuntu
@@ -59,7 +66,7 @@ jobs: # lista de trabajos del workflow
         uses: actions/checkout@v4 # clona el repositorio
 
       - name: Instalar Java 17 # paso 2
-        uses: actions/setup-java@v4 # accion oficial para preparar Java
+        uses: actions/setup-java@v5 # accion oficial para preparar Java
         with: # parametros de la accion
           distribution: temurin # distribucion del JDK
           java-version: "17" # version de Java
